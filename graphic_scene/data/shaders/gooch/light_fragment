@@ -1,0 +1,29 @@
+uniform sampler2D texture;
+uniform float specular_power;
+uniform vec4 specular_color;
+uniform vec3 warm_color;
+uniform vec3 cold_color;
+uniform float warm_diffuse;
+uniform float cold_diffuse;
+
+varying vec2 texcoord;
+varying vec3 light_dir;
+varying vec3 normal;
+varying vec3 eye_dir;
+
+void main() {
+    vec3 n_light_dir = normalize(light_dir);
+    vec3 n_normal = normalize(normal);
+    vec3 n_eye_dir = normalize(eye_dir);
+    vec3 r_light_dir = normalize(reflect(-1.0 * n_light_dir, n_normal));
+    float ratio = (1.0 + dot(n_normal, n_light_dir)) / 2.0;
+
+    vec4 color = texture2D(texture, texcoord);
+    vec3 cold_comp = clamp((1.0 - cold_diffuse) * cold_color + cold_diffuse * color, 0.0, 1.0);
+    vec3 warm_comp = clamp((1.0 - warm_diffuse) * warm_color + warm_diffuse * color, 0.0, 1.0);
+    vec4 i = vec4(clamp(mix(cold_comp, warm_comp, ratio), 0.0, 1.0), 1.0);
+
+    vec4 specular_effect = specular_color * pow(max(dot(n_eye_dir, r_light_dir), 0.0), specular_power);
+
+	gl_FragColor = i + specular_effect;
+}

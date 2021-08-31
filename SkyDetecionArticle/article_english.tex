@@ -1,0 +1,321 @@
+% This is samplepaper.tex, a sample chapter demonstrating the
+% LLNCS macro package for Springer Computer Science proceedings;
+% Version 2.20 of 2017/10/04
+%
+\documentclass[runningheads]{llncs}
+
+
+%
+\usepackage{threeparttable}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+% \usepackage[russian]{babel}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+% Used for displaying a sample figure. If possible, figure files should
+% be included in EPS format.
+%
+% If you use the hyperref package, please uncomment the following line
+% to display URLs in blue roman font according to Springer's eBook style:
+% \renewcommand\UrlFont{\color{blue}\rmfamily}
+\newcommand\MyBox[2]{
+  \fbox{\lower0.75cm
+    \vbox to 1.7cm{\vfil
+      \hbox to 1.7cm{\hfil\parbox{1.4cm}{#1\\#2}\hfil}
+      \vfil}%
+  }%
+}
+
+
+\begin{document}
+%
+\title{AUTOMATIC SEGMENTATION OF THE SKY IN THE IMAGES}
+%
+%\titlerunning{Abbreviated paper title}
+% If the paper title is too long for the running head, you can set
+% an abbreviated paper title here
+%
+\author{D. I. Ivakhnenko\inst{1}\orcidID{0000-0003-1493-5192} \and
+M.V.Yurushkin\inst{1}\orcidID{0000-0003-2477-0459}}
+%
+% First names are abbreviated in the running head.
+% If there are more than two authors, 'et al.' is used.
+%
+\institute{I.I. Vorovich Institute of Mathematics, Mechanics, and Computer Science, \\ 8A Milchakova St., Rostov-on-Don, 344090, Russian Federation}
+%
+\maketitle              % typeset the header of the contribution
+%
+\begin{abstract}
+This work is devoted to the problem of detection of sky areas on the
+arbitrary input image. The input image can be considered as a set of pixels, in which for each element it is necessary to specify the probability of its belonging to a certain class, in this context, there is only one - the sky class. With this approach, the problem is reduced to the problem of image segmentation. In the course of the work, a dataset similar to the SkyFinder was formed; an automatic approach to segmentation of the sky in the images was developed, which is resistant to various lighting conditions, weather phenomena, etc. The solution is based on the use of deep neural networks with further processing of the network results by means of computer vision algorithms. Different network architectures were used and their efficiency was compared. High indices of F1-score metrics were obtained on the test sample.
+
+\keywords{Segmentation  \and Detection of the sky \and Fully convolutional network.}
+\end{abstract}
+%
+%
+%
+
+\section{Introduction}
+
+We set the task of developing the algorithm that is capable to define a region of the sky for an arbitrary input images taken by the camera of the mobile device. This kind of solution can be used in end user products designed to work with photo or video; be used for additional data for the image processing algorithms\cite{ind_outd}. As a result of this algorithm, a binary mask matrix is considered, each element of which takes a value depending on a certain class: 1 - sky class, 0 - class of other objects. Evaluation of the quality of the responses is carried out by calculating the F1-score metrics.  In this work we highlight the use of fully convolutional networks to the problem of segmentation of the image (paragraph 4.2), data augmentation as a way to artificially diversify the existing dataset and to prevent overfitting the network to the specific images (section 4.1), the use of computer vision algorithms to adjust the accuracy of the segmentation obtained after the operation of the network (section 4.3). Section 5 describes our metrics and loss function, provides training results for different approaches to network construction and post-processing methods.
+
+\section{Background and related work}
+
+For image segmentation, there are approaches that do not involve the use of neural networks\cite{seg1}\cite{seg2}\cite{seg3}, but in our problem the use of such solutions was impossible. Methods for finding the binarization threshold and algorithms based on the use of predicates for dividing pixels by classes show satisfactory results only on specific examples, having a poor ability to generalize: so binarization by the Otsu method on an arbitrary input image is not accurate enough, highlighting, in addition to the right, all sufficiently bright, above the threshold pixels. In the case of algorithms based on checking the closeness to the color, must be set for each individual image, a color center value in RGB representation for color, which will go compare\cite{eff_app}. Note here that we can consider another solution: look for the boundary in the image between the earth and the sky\cite{ef_sky_detect}
+
+\section{Datasets}
+
+We have prepared a set of 1270 pairs of images: the original photo and the corresponding binarized mask, on which the white color was marked with the sky, black - the rest of the image. The data were divided into three groups: training, test and validation. In the training included 1100 items, in a test of 100 and 70 in the validation. The training sample was used to train the model, the test sample was used to calculate the metrics at the end of each epoch, the elements from the valdiation sample were used to assess the quality of different models and approaches to mask processing. The samples contain images with different weather, time of day, landscape and color brightness, which reduces the probability of retraining the model for some of the features. A particular difficulty in this task is the high variety of sky states in the input images: in one image the sky can be expressed in a wide range of colors, its individual areas can be covered by objects that are not related to it, etc..
+
+\section{Our approach}
+Subject to the foregoing, we use as a solution a deep convolutional networks, which demonstrate high accuracy in the tasks of image processing\cite{fcn}. The Unet network topology was taken as a basis, various methods of constructing the encoder-part of the model (the contracting path) involved in extracting characteristics from the input data were tested. A similar approach was demonstrated by Cecilia La Place, Aisha Urooj Khan and Ali Borji in their work Segmenting Sky Pixels in Images\cite{seg_sky}. In this study, the RefineNet topology was used without further processing of the output mask, training was conducted on the dataset SkyFinder\cite{sky_seg_wild}.
+
+\subsection{Preprocessing}
+
+Before the convolution network training in our solution, data augmentation is performed to reduce the probability of overfitting on the images of the training sample, as follows:
+\begin{itemize}
+\item Increase or decrease brightness.
+\item Rotate the image up to 45 degrees.
+\item Reflection of the image relative to the vertical and/or horizontal axes.
+\item Change scale of image.
+\item The reflection of the image borders.
+\end{itemize}
+The last method is described in \cite{unet}: the image is indented from the top and bottom borders, reflected and glued to it; then the resulting image is scaled to the original size. Examples of the reflection method are shown in Fig. 1 and Fig. 2. This method allows to save spatial information that can be lost on convolutional layers for pixels near the image border.
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{before_mir.png}
+    \caption{Original image.}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{after_mir.png}
+    \caption{Image with mirrored borders.}
+  \end{minipage}
+\end{figure}
+
+\subsection{Deep model architecture}
+
+ The solution used the architecture presented by Olaf Ronneberger, Philip Fischer, and Thomas Bros in UNet: Convolutional Networks for BiomedicalImage Segmentation\cite{unet}. This approach involves the reflection of convolution network with the replacement of the operations of reducing the dimension by taking the maximum value of the window on the operation of increasing the dimension. The final part of the network operations of dimension reduction (the encoder part) extracts information from the input data by means of the use of convolutional layers, the part with the operations of increasing dimension (the decoder part) using the output from the encoder is part of the information builds the final mask. The characteristics obtained at the extraction stage are combined with the results of the decoder part. For rice.~\ref{fig 1} introduces the complete network architecture.
+
+\begin{figure}[H]
+\includegraphics[width=\textwidth]{unet.png}
+\caption{Unet architecture.} \label{fig1}
+\end{figure}
+
+ To improve the network quality indicator (F1-score metrics), the encoder part was replaced with similar network functionality: ResNet50\cite{resnet}, ResNet101\cite{resnet}, MobileNetV2\cite{mobnet}. The basic idea of this replacement is to use a network that is pre-trained on a larger dataset than is available in this task and that demonstrates better feature extraction results than the basic approach in Unet topology.
+
+\subsection{Postporocessing}
+The result of the network is a matrix of probabilities of belonging of each pixel to the target class. This result must be binarized in order to strictly highlight the sky in the image. Below are three methods tested as part of the solution.
+
+\subsubsection{Binarization by rounding}
+ The first method of binarization is rounding to the nearest integer. It showed, as seen from the table.\ref{tab 3}, the lowest quality metric value for both the basic Unet topology and its modification.
+
+\subsubsection{Binarization by Otsu thresholding} 
+The result was better demonstrated by the Otsu thresholding for binarization of the image, its use improved the quality of the model in comparison with binarization rounding. Father binarization minimizes intra-class variance.
+
+\subsubsection{Binarization with the restoration of the borders} 
+This method combines consistently the second method and the correction of inaccurate classification of pixels. The correction of the inaccuracy is solved as follows: the binarized mask is applied to the FindContours algorithm from the OpenCV library to find closed contours belonging to the sky class; then those contours whose area is less than the specified value are selected (the value was selected empirically in the examples), and are marked as a class of other objects; the last step restores the accuracy of the boundary between the two classes.
+
+Restoring the accuracy of the boundary between classes is the addition of the mask obtained by the Binarization by Otsu thresholding and the mask after the selection of contours. The first boundary of classes is more accurate, the second one has no falsely classified objects. Suppose that $O$ is a mask matrix obtained by the Otsu method, the elements are $0$ or ${\text{1}}$; ${\text{A}}$ is a mask matrix obtained by the selection of contours after the Otsu method, the elements are ${\text{0}}$ or ${\text{1}}$. Then ${\text{O'}}$ is a matrix whose elements hold $ {o'_{ij} = 0}$ if ${o_{ij} = 1}$ ${o_{ij} \in \text{O}}$, otherwise ${o'_{ij} = 1}$(1). Similarly, we construct ${\text{A'}}$ for ${\text{A}}$. By adding the matrices ${\text{O'}}$ and ${\text{A'}}$ we obtain the matrix ${\text{B'}}$ . The mask matrix ${\text{B'}}$, for which (1) holds for ${\text{B}}$ , has a boundary with restored accuracy.
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{before_restore.png}
+    \caption{After selection of contours.}
+    \label{fig3}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{after_restore.png}
+    \caption{After the restoration.}
+    \label{fig4}
+  \end{minipage}
+\end{figure}
+
+For Fig.4, Fig.5 shows the comparison of the two masks before and after the reconstruction accuracy. The border detail is higher on the right image.
+
+\section{Experimental results}
+
+Training of the model took place over a hundred epochs, at the end of each metric accuracy was measured for the validation sample from the original dataset. At the end of the epochs, F1-score metrics was measured on the test sample.
+
+F1-score metrics is calculated using a matrix
+errors (table.~\ref{tab 1}). Training results are given
+table.~\ref{tab 2} and table~\ref{tab 3}.
+
+\noindent
+\renewcommand\arraystretch{1.5}
+\setlength\tabcolsep{0pt}
+\begin{table}[H]
+\centering
+\caption{Confusion matrix}\label{tab1}
+\begin{tabular}
+{c >{\bfseries}r @{\hspace{0.7em}}c @{\hspace{0.4em}}c @{\hspace{0.7em}}l}
+  \multirow{10}{*}{\parbox{1.1cm}{\bfseries\raggedleft actual\\ value}} & 
+    & \multicolumn{2}{c}{\bfseries Prediction outcome} & \\
+  & & \bfseries p & \bfseries n & \bfseries total \\
+  & p$'$ & \MyBox{True}{Positive} & \MyBox{False}{Negative} & P$'$ \\[2.4em]
+  & n$'$ & \MyBox{False}{Positive} & \MyBox{True}{Negative} & N$'$ \\
+  & total & P & N &
+\end{tabular}
+\end{table}
+
+$$
+F_{1}=2 \cdot \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+$$
+, where
+\[
+Precision=\frac{\text{TP}}{\text{TP + FP} }
+\]
+and
+\[
+Recall=\frac{\text{TP}}{\text{TP + FN} };
+\]
+\[
+Accuracy=\frac{\text{TP + TN}}{\text{TP + FP + TN + FN} }.
+\]
+
+The logistic error function averaged over the size of the input batch was used as a loss function.
+
+\[
+H_{p}(q)= -\frac{1}{N} \cdot \sum_{i=1}^{N}(y_{i} \cdot \log{(p(y_{i}))} + (1 - y_{i}) \cdot \log{(1 - p(y_{i}))})
+\]
+
+\begin{table}[H]
+    \begin{minipage}{.45\linewidth}
+      \centering
+\caption{Comparison of F1-score metric of different encoder-parts.}
+\label{tab2}
+       \begin{tabular}{|l|r|}
+\hline
+Model &  F1-score \\
+\hline
+Unet &  0.9729 \\ 
+ResNet50 + Unet & 0.9891\\ 
+ResNet101 + Unet & 0.9895\\ 
+MobileNetV2 + Unet & 0.9789\\ \hline
+\end{tabular}
+
+    \end{minipage}%
+	\hspace{2em}
+    \begin{minipage}{.45\linewidth}
+      \centering
+      \caption{Comparison of quality by F1-score metric for different approaches to mask processing for different models.}
+\label{tab3}
+        \begin{tabular}{|l|c|r|}
+\hline
+Model & Postprocessing method & F1-score\\
+\hline
+Unet & Binarization by rounding & 0.9729 \\
+Unet & Binarization by Otsu thresholding & 0.9736 \\ 
+Unet & Binarization with the restoration of the borders &  0.9767 \\ 
+Unet+ResNet50 & Binarization by rounding & 0.9891 \\ 
+Unet+ResNet50 & Binarization by Otsu thresholding & 0.9892 \\
+Unet+ResNet50 & Binarization with the restoration of the borders & 0.9901 \\ \hline
+\end{tabular}
+    \end{minipage} 
+\end{table}
+
+
+\begin{figure}[H]
+\includegraphics[width=0.8\textwidth]{fig.png}
+\caption{Comparison of loss function values for different models on the training sample by epochs. The periods are marked horizontally on the chart and the values of the loss function are marked vertically. Bottom line - Unet+ResNet50, upper - basic Unet.} \label{fig2}
+\end{figure}
+
+The best result demonstrates a combination of ResNet101 Unet and postprocessed according to the method 3, the next in quality is the combination of ResNet50, Unet and method 3. Note that the use of ResNet101 instead of ResNet50 does not give a noticeable increase in quality with a significant increase in count of network parameters.
+
+
+\section{Conclusion}
+As part of this work, an algorithm for automatic detection of the sky on an arbitrary input image was developed. The approach was based on the use of deep convolution networks with subsequent processing of the mask by algorithms from the field of computer vision.  The system demonstrates high quality in F1-score and accuracy metrics on validation and test samples, which indicates the possibility of its applicability to arbitrary data. The disadvantages include low accuracy in images taken at night or containing smog, fog. Examples of the algorithm (red in the image to the selected area of the sky):
+
+\begin{figure}[H]
+\begin{minipage}[b]{0.4\textwidth}
+    \centering\includegraphics[width=5cm]{example2.png}
+    \caption{Example 1.}
+\end{minipage}
+\begin{minipage}[b]{0.4\textwidth}
+    \centering\includegraphics[width=5cm]{example3.png}
+    \caption{Example 2.}
+\end{minipage}
+\begin{minipage}[b]{0.4\textwidth}
+    \centering\includegraphics[width=5cm]{example1.png}
+    \caption{Example 3.}
+\end{minipage}
+\end{figure}
+%
+% ---- Bibliography ----
+%
+% BibTeX users should specify bibliography style 'splncs04'.
+% References will then be sorted and formatted in the correct style.
+%
+% \bibliographystyle{splncs04}
+% \bibliography{mybibliography}
+%
+
+\begin{thebibliography}{8}
+\bibitem{ind_outd}
+ Jiebo Luo, A. Savakis : Indoor vs outdoor classification of consumer photographs using low-level and semantic features. 
+ Published in: Proceedings 2001 International Conference on Image Processing (Cat. No.01CH37205), Oct. 2001 
+IEEE(2001). \doi{10.1109/ICIP.2001.958601}
+
+\bibitem{seg1}
+ K. J. Batenburg, J. Sijbers : Optimal Threshold Selection for Tomogram Segmentation by Projection Distance Minimization. 
+ Published in: IEEE Transactions on Medical Imaging, Volume: 28 , Issue: 5, pp  676 -- 686, May 2009 
+
+\bibitem{seg2}
+ Alireza Kashanipour, Narges Shamshiri Milani, Amir Reza Kashanipour : Robust Color Classification Using Fuzzy Rule-Based Particle Swarm Optimization
+Published in: 2008 Congress on Image and Signal Processing 
+July 2008
+\doi{10.1109/CISP.2008.770}
+
+\bibitem{seg3}
+Dumitru Dan Burdescu, Marius Brezovan, Liana Stanescu, Cosmin Stoica Spahiu: A Spatial Segmentation Method
+International Journal of Computer Science and Applications
+Vol. 11, No. 1, pp. 75 -- 100, 2014 
+
+\bibitem{eff_app}
+Irfanullah, Kamal Haider, Qasim Sattar, Sadaqat-ur-Rehman, Amjad Ali: An Efficient Approach for Sky Detection. 
+IJCSI International Journal of Computer Science Issues, Vol. 10, Issue 4, No 1, July 2013
+, pp. 223--226.
+
+\bibitem{ef_sky_detect}
+Chi-Wei Wang, Jian-Jiun Ding, Po-Jen Chen: An Efficient Sky Detection Algorithm Based on Hybrid Probability Model. 
+Proceedings of APSIPA Annual Summit and Conference 2015, pp. 919--922, Dec. 2015.
+
+\bibitem{fcn}
+Jonathan Long, Evan Shelhamer, Trevor Darrell: Fully Convolutional Networks for Semantic Segmentation. 
+IEEE Transactions on Pattern Analysis and Machine Intelligence
+Volume 39 Issue 4, April 2017
+Page 640-651 
+
+\bibitem{seg_sky}
+Cecilia La Place, Aisha Urooj Khan, Ali Borji: Segmenting Sky Pixels in Images
+, {\tt  arXiv:1712.09161v2 [cs.CV]}
+8 Jan 2018
+
+\bibitem{sky_seg_wild}
+Radu P. Mihail, Valdosta State University, Scott Workman, Zach Bessinger, Nathan Jacobs: Sky segmentation in the wild: An empirical study
+Published in: 2016 IEEE Winter Conference on Applications of Computer Vision (WACV), March 2016, IEEE(2016).
+\doi{10.1109/WACV.2016.7477637}
+
+\bibitem{unet}
+Olaf Ronneberger, Philipp Fischer, Thomas Brox: U-Net: Convolutional Networks for BiomedicalImage Segmentation
+, {\tt  arXiv:1505.04597v1  [cs.CV]}
+18 May 2015
+
+\bibitem{resnet}
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun: Deep Residual Learning for Image Recognition
+, {\tt  arXiv:1512.03385v1  [cs.CV]}
+10 Dec 2015
+
+\bibitem{mobnet}
+Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen: MobileNetV2: Inverted Residuals and Linear Bottlenecks
+, {\tt arXiv:1801.04381v4  [cs.CV]}
+21 Mar 2019
+\end{thebibliography}
+\end{document}

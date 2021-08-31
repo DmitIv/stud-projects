@@ -1,0 +1,20 @@
+uniform sampler2D texture;
+uniform float specular_power;
+uniform vec4 specular_color;
+uniform float minnaert_power;
+
+varying vec2 texcoord;
+varying vec3 light_dir;
+varying vec3 normal;
+varying vec3 eye_dir;
+
+void main() {
+    vec3 n_light_dir = normalize(light_dir);
+    vec3 n_normal = normalize(normal);
+    vec3 n_eye_dir = normalize(eye_dir);
+
+    vec4 color = texture2D(texture, texcoord);
+    float i = pow(max(dot(n_normal, n_light_dir), 0.0), 1.0 + minnaert_power) * pow(1.0 - dot(n_normal, n_light_dir), 1.0 - minnaert_power);
+
+	gl_FragColor = color * i;
+}

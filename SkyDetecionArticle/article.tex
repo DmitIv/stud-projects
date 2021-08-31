@@ -1,0 +1,434 @@
+% This is samplepaper.tex, a sample chapter demonstrating the
+% LLNCS macro package for Springer Computer Science proceedings;
+% Version 2.20 of 2017/10/04
+%
+\documentclass[runningheads]{llncs}
+
+
+%
+\usepackage{threeparttable}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+% Used for displaying a sample figure. If possible, figure files should
+% be included in EPS format.
+%
+% If you use the hyperref package, please uncomment the following line
+% to display URLs in blue roman font according to Springer's eBook style:
+% \renewcommand\UrlFont{\color{blue}\rmfamily}
+\newcommand\MyBox[2]{
+  \fbox{\lower0.75cm
+    \vbox to 1.7cm{\vfil
+      \hbox to 1.7cm{\hfil\parbox{1.4cm}{#1\\#2}\hfil}
+      \vfil}%
+  }%
+}
+
+
+\begin{document}
+%
+\title{АВТОМАТИЧЕСКАЯ СЕГМЕНТАЦИЯ НЕБА НА ИЗОБРАЖЕНИЯХ}
+%
+%\titlerunning{Abbreviated paper title}
+% If the paper title is too long for the running head, you can set
+% an abbreviated paper title here
+%
+\author{Д. И. Ивахненко\inst{1}\orcidID{0000-0003-1493-5192} \and
+M.V.Yurushkin\inst{1}\orcidID{0000-0003-2477-0459}}
+%
+% First names are abbreviated in the running head.
+% If there are more than two authors, 'et al.' is used.
+%
+\institute{I.I. Vorovich Institute of Mathematics, Mechanics, and Computer Science, \\ 8A Milchakova St., Rostov-on-Don, 344090, Russian Federation}
+%
+\maketitle              % typeset the header of the contribution
+%
+\begin{abstract}
+Данная работа посвящена вопросу детекции участков неба на
+произвольном входном изображении.
+Входное изображение можно рассматривать как набор из пикселей, 
+в котором для каждого элемента необходимо указать вероятность
+его принадлежности к определенному классу, в данном контексте 
+одному - классу неба. При таком подходе данная проблема сводится
+к задаче сегментации изображений. 
+В ходе работы был сформирован датасет, аналогичный SkyFinder; разработан автоматический подход сегментации 
+неба на изображениях, устойчивый к разнообразным условиям освещенности, погодным явлениям и т.д. 
+Решение строится на применении глубоких нейронных сетей с
+дальнейшей обработкой результатов работы сети по средствам алгоритмов 
+компьютерного зрения. Использовались различные архитектуры 
+сети, сравнивалась их эффективность.
+Были получены высокие показатели метрик accuracy и F1-score на тестовой выборке.
+
+\keywords{Сегментация  \and Выделение неба \and Сверточные сети.}
+\end{abstract}
+%
+%
+%
+
+\section{Introduction}
+
+Нами была поставлена задача разработки алгоритма, способного для произвольного входного
+изображения, сделанного на камеру мобильного устройства, опеределить 
+область неба. Подобного рода решения могут быть использованы в конечных
+пользовательских продуктах, направленных на работу с фото или видео, 
+применяться для получения дополнительных данных для алгоритмов 
+обработки изображений\cite{ind_outd}.
+В качестве результата работы такого алгоритма
+рассматривается бинарная маска - матрица, каждый 
+элемент которой принимает значение в зависимости от определенного 
+для него класа: 1 - класс неба, 0 - класс остальных объектов.
+Оценка качества получаемых ответов проводится путем вычисления
+метрик accuracy и F1-score. 
+В рамках этой работы мы освещаем применение fully convolutional networks к задачи сегментации изображения (пункт 4.2),
+аугментацию данных как способ искусственно разнообразить имеющийся датасет и предотвратить переобучение сети на конкретных изображениях (пункт 4.1), использование алгоритмов компьютерного зрения для корректировки точности сегментации, полученной после работы 
+сети (пункт 4.3). В разделе 5 описаны используемые нами метрики и функция потерь, приведены результаты обучения для различных подходов к построению сети и методов постобработки.
+
+\section{Background and related work}
+
+Для сегментации изображения существуют подходы, 
+не предполагающие использования нейронных сетей\cite{seg1}\cite{seg2}\cite{seg3}, но в нашей 
+задаче применение таких решений оказалось невозможным. Методы 
+нахождения порога бинаризации и алгоритмы, основанные на
+использовании предикатов для разделения пикселей по классам, демонстрируют 
+удовлетворительные результаты только на конкретных
+примерах, имея плохую способность к обобщению: так бинаризация
+по методу Отсу на произвольном входном изображении оказывается
+недостаточно точная, выделяя, помимо верных, все достаточно яркие
+и, тем самым, оказавшиеся выше порога пиксели. В случае алгоритмов, 
+основанных на проверке на близость к цвету, необходимо задавать 
+для каждого отдельно взятого изображения его цветовой центр -
+значение в RGB представлении для цвета, с которым будет идти сравнение\cite{eff_app}.
+Отметим здесь, что можно
+рассмотреть и другое решение: искать границу на изображении между 
+землей и небом\cite{ef_sky_detect}
+
+\section{Datasets}
+
+Нами был подготовлен набор из 1270 пар изображений:
+оригинальная фотография и соотвествующая ей бинаризированная маска, на которой белым цветом была отмечена область неба, черным - остальная часть изображения. Данные были разбиты на три группы:
+обучающую, тестовую и валидационную. В обучающую вошли 1100
+элементов, в тестовую 100 и 70 в валидационную. На обучающей выборке 
+проводилась тренировка модели, на тестовой подсчитывались
+метрики в конце каждой эпохи, элементы из валдиационной выборки
+использовались для оценки качества различных моделей и подходов к
+обработке маски. В выборках присутсвуют изображения с различной
+погодой, временем суток, ландшафтом и яркостью цветов, что снижает 
+вероятность переобучения модели по какому-то из признаков.
+Особую сложность в рамках данной задачи представляет высокое 
+разнообразие состояний неба на входных изображениях: на
+одном изображении небо может быть выражено широким спектром
+цветов, его отдельные участки могут быть перекрыты объектами, к
+нему не относящимися и пр..
+
+\section{Our approach}
+С учетом вышесказанного делается предположение о необходимости 
+использования глубоких сверточных сетей, которые демонстрируют 
+высокую точность в задачах обработки изображения\cite{fcn}, в качестве решения. 
+За основу была взята U-net топология сети, были
+опробованы различные способы построения енкодер-части модели
+(the contracting path), участвующей в извлечении характеристик из
+входных данных.
+Подобный подход был продемонстрирован Cecilia La Place, Aisha
+Urooj Khan и Ali Borji в их работе Segmenting Sky Pixels in Images\cite{seg_sky}.
+В рамках того исследования была использована топология RefineNet
+без последующей обработки выходной маски, обучения проводилось
+на датасете SkyFinder\cite{sky_seg_wild}.
+
+\subsection{Preprocessing}
+
+Перед тренировкой сверточной сети в нашем решении производится аугментация данных для снижения вероятности переобучения на изображениях тренировачной выборки, проводимая следующим образом:
+\begin{itemize}
+\item Увеличение, уменьшение яркости.
+\item Поворот изображения на угол до 45 градусов.
+\item Отражение изображения относительно вертикальной и горизонтальной осей.
+\item Масштабирование изображения.
+\item Отражение границ изображения.
+\end{itemize}
+Последний способ описан в \cite{unet}: у изображения берутся отступы  от верхней и нижней границ, отражаются и склеиваются с ним; затем получившееся изображение масштабируется к исходным размерам. Примеры работы метода отражения продемонстрированы на рис. 1 и рис. 2. Данный способ позволяет {сохранить пространственную 
+информацию, которая может теряться на сверточных
+слоях, для пикселей, находящихся вблизи границы изображения.
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{before_mir.png}
+    \caption{Оригинальное изображение.}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{after_mir.png}
+    \caption{Изображение с отраженными границами.}
+  \end{minipage}
+\end{figure}
+
+\subsection{Deep model architecture}
+
+В решении использовалась архитектура, представленная
+Olaf Ronneberger, Philipp Fischer и Thomas Brox в работе U-Net:
+Convolutional Networks for BiomedicalImage Segmentation\cite{unet}. Данный
+подход подразумевает отражение сверточной сети с заменой операций 
+понижения размерности путем взятия максимального значения
+по окну на операции повышения размерности. Часть итоговой сети с
+операциями понижения размерности (енкодер-часть) извлекает информацию 
+из входных данных по средствам применения сверточных
+слоев, часть с операциями повышения размерности (декодер-часть),
+используя выходную с енкодер-части информацию строит итоговую
+маску. Характеристики, получаемые на этапе извлечения, комбинируются 
+с результатами работы декодер-части. На рис.~\ref{fig1} представлена
+полная архитектура сети.
+
+\begin{figure}[H]
+\includegraphics[width=\textwidth]{unet.png}
+\caption{Unet архитектура} \label{fig1}
+\end{figure}
+
+Для улучшения показателей качества сети (метрик accuracy и
+F1-score) енкодер-часть была заменена на схожие по функциональности 
+сети: ResNet50\cite{resnet}, ResNet101\cite{resnet}, MobileNetV2\cite{mobnet}. Основная идея такой замены следующая: использовать сеть, предобученую на большем датасете, чем имеется в рамках этой задачи,
+и демонстрирующую лучшие результаты в извлечении признаков, чем базовый подход в Unet топологии.
+
+\subsection{Postporocessing}
+Результатом работы сети является матрица вероятностей принадлежности каждого
+пикселя к целевому классу. Такой результат необходимо
+бинаризировать для того, чтобы строго выделить небо на изображении. Ниже приведены три метода, протестированные в рамках решения.
+
+\subsubsection{Бинаризация округлением}
+Первый метод бинаризации заключался в округлении 
+к ближайшему целому числу. Он показал, как видно из табл.\ref{tab3}, наименьшее значения метрики качества как для базовой Unet топологии, так и для ее модификации. 
+\subsubsection{Бинаризация методом Отсу} 
+Результат лучше продемонстрировал метод Отсу для бинаризации изображения, его использование улучшило качество модели в сравнении с бинаризацией округлением. Бинаризация по Отсу минимизирует внутриклассовую дисперсию.
+
+\subsubsection{Бинаризация с восстановлением границ} 
+Этот метод совмещает в себе последовательно второй метод и исправление неточности классификации пикселей. Исправление неточности соврешается следующим образом: к бинаризированной маске применяется алгроитм FindContours из состава библиотеки OpenCV для нахождения замкнутых контуров, принадлежащих к классу неба; затем отбираются те из них, чья площадь меньше заданного значения (значение подбиралось опытным путем на примерах), и помечаются как класс остальных объектов; последним шагом восстанавливается точность границы между двумя классами.
+
+Восстановление точности границы между классами представляет  собой сложение маски, полученной методом бинаризации по Отсу, и маски после отбора контуров. На первой граница классов более точная, 
+на второй отсутствуют ложно классифицированные объекты.
+Положим, $O$ - матрица-маска, полученная методом Отсу, элементы 
+равны $0$ или ${\text{1}}$; ${\text{A}}$ - матрица-маска, полученная отбором контуров 
+после метода Отсу, элементы равны ${\text{0}}$ или ${\text{1}}$. Тогда ${\text{O'}}$ - матрица,
+для элементов которой справедливо: ${o'_{ij} = 0}$, если ${o_{ij} = 1}$ ${o_{ij} \in \text{O}}$, иначе
+${o'_{ij} = 1}$(1). Аналогично построим ${\text{A'}}$ для ${\text{A}}$. Сложением матриц ${\text{O'}}$ и ${\text{A'}}$
+получаем матрицу ${\text{B'}}$ . Матрица-маска ${\text{B'}}$, для которой справедливо (1)
+в отношении ${\text{B}}$ , обладает границей с восстановленной точностью.
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{before_restore.png}
+    \caption{После отбора контуров.}
+    \label{fig3}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.4\textwidth}
+    \includegraphics[width=\textwidth]{after_restore.png}
+    \caption{После восстановления.}
+    \label{fig4}
+  \end{minipage}
+\end{figure}
+
+На рис.4 рис.5 приведено сравнение двух масок: до и после восстановления 
+точности. Детализация границы выше на правом изображении.
+
+\section{Experimental results}
+
+Обучение модели происходило на протяжении ста эпох, по окончанию 
+каждой замерялась метрика accuracy для валидационной выборки 
+из исходного датасета. По завершению эпох на тестовой выобрке 
+замерялись метрики accuracy и F1-score.
+
+Метрики accuracy и F1-score вычисляются с помощью матрицы
+ошибок (табл.~\ref{tab1}). Результаты обучения приведены
+в табл.~\ref{tab2} и табл.~\ref{tab3}.
+
+\noindent
+\renewcommand\arraystretch{1.5}
+\setlength\tabcolsep{0pt}
+\begin{table}[H]
+\centering
+\caption{Confusion matrix}\label{tab1}
+\begin{tabular}
+{c >{\bfseries}r @{\hspace{0.7em}}c @{\hspace{0.4em}}c @{\hspace{0.7em}}l}
+  \multirow{10}{*}{\parbox{1.1cm}{\bfseries\raggedleft actual\\ value}} & 
+    & \multicolumn{2}{c}{\bfseries Prediction outcome} & \\
+  & & \bfseries p & \bfseries n & \bfseries total \\
+  & p$'$ & \MyBox{True}{Positive} & \MyBox{False}{Negative} & P$'$ \\[2.4em]
+  & n$'$ & \MyBox{False}{Positive} & \MyBox{True}{Negative} & N$'$ \\
+  & total & P & N &
+\end{tabular}
+\end{table}
+
+$$
+F_{1}=2 \cdot \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+$$
+, где
+\[
+Precision=\frac{\text{TP}}{\text{TP + FP} }
+\]
+и
+\[
+Recall=\frac{\text{TP}}{\text{TP + FN} };
+\]
+\[
+Accuracy=\frac{\text{TP + TN}}{\text{TP + FP + TN + FN} }.
+\]
+
+В качестве функции потерь использовалась усредненная по размеру 
+входного батча логистическая функция ошибки.
+
+\[
+H_{p}(q)= -\frac{1}{N} \cdot \sum_{i=1}^{N}(y_{i} \cdot \log{(p(y_{i}))} + (1 - y_{i}) \cdot \log{(1 - p(y_{i}))})
+\]
+
+\begin{table}[H]
+    \begin{minipage}{.45\linewidth}
+      \centering
+\caption{Сравнение метрики F1-score различных енкодер-частей}
+\label{tab2}
+       \begin{tabular}{|l|r|}
+\hline
+Модель &  F1-score \\
+\hline
+Unet &  0.9729 \\ 
+ResNet50 + Unet & 0.9891\\ 
+ResNet101 + Unet & 0.9895\\ 
+MobileNetV2 + Unet & 0.9789\\ \hline
+\end{tabular}
+
+    \end{minipage}%
+	\hspace{2em}
+    \begin{minipage}{.45\linewidth}
+      \centering
+      \caption{Сравнение качества по метрике F1-score для различных
+подходов к обработке маски для различных моделей}
+\label{tab3}
+        \begin{tabular}{|l|c|r|}
+\hline
+Модель & Способ постобработки & F1-score\\
+\hline
+Unet & Бинаризация округлением & 0.9729 \\
+Unet & Бинаризация по методу Отсу & 0.9736 \\ 
+Unet & Бинаризация с восстановлением границ &  0.9767 \\ 
+Unet+ResNet50 & Бинаризация округлением & 0.9891 \\ 
+Unet+ResNet50 & Бинаризация по методу Отсу & 0.9892 \\
+Unet+ResNet50 & Бинаризация с восстановлением границ & 0.9901 \\ \hline
+\end{tabular}
+    \end{minipage} 
+\end{table}
+
+
+\begin{figure}[H]
+\includegraphics[width=0.8\textwidth]{fig.png}
+\caption{Сравнение значений функции потери для разных моделей 
+на обучающей выборке по эпохам. По горизонтали
+на графике отмерены эпохи, по вертикали - значения
+функции потерь. Нижняя линия - Unet+ResNet50, верхняя 
+- базовый Unet} \label{fig2}
+\end{figure}
+
+Лучший результат демонстрирует сочетание ResNet101 и Unet с постобработкой по методу 3, следующим по качеству выступает сочетание ResNet50, Unet и метода 3. Отметим, что использование ResNet101 вместо ResNet50 не дает ощутимого прироста качества при значительном увелечении объема сети.
+
+
+\section{Conclusion}
+В рамках данной работы был разработан алгоритм автоматической 
+детекции неба на произвольном входном изображении. В основу
+подхода легло использование глубоких сверточных сетей с последующей 
+обработкой маски алгоритмами из области компьютерного зрения. 
+Система демонстрирует высокое качество по метрике F1-score и
+accuracy на валидационных и тестовых выборках, что говорит о возможности 
+ее применимости на произвольных данных. К недостаткам
+можно отнести низкую точность на изображениях, сделанных в ночное 
+время или содержащих смог, туман.
+Примеры работы алгоритма (красным на изображении выделена 
+область неба):
+
+\begin{figure}[H]
+\begin{minipage}[b]{0.4\textwidth}
+    \centering\includegraphics[width=5cm]{example2.png}
+    \caption{Пример 1.}
+\end{minipage}
+\begin{minipage}[b]{0.4\textwidth}
+    \centering\includegraphics[width=5cm]{example3.png}
+    \caption{Пример 2.}
+\end{minipage}
+\begin{minipage}[b]{0.4\textwidth}
+    \centering\includegraphics[width=5cm]{example1.png}
+    \caption{Пример 3.}
+\end{minipage}
+\end{figure}
+%
+% ---- Bibliography ----
+%
+% BibTeX users should specify bibliography style 'splncs04'.
+% References will then be sorted and formatted in the correct style.
+%
+% \bibliographystyle{splncs04}
+% \bibliography{mybibliography}
+%
+\section{References}
+\begin{thebibliography}{8}
+\bibitem{ind_outd}
+ Jiebo Luo, A. Savakis : Indoor vs outdoor classification of consumer photographs using low-level and semantic features. 
+ Published in: Proceedings 2001 International Conference on Image Processing (Cat. No.01CH37205), Oct. 2001 
+IEEE(2001). \doi{10.1109/ICIP.2001.958601}
+
+\bibitem{seg1}
+ K. J. Batenburg, J. Sijbers : Optimal Threshold Selection for Tomogram Segmentation by Projection Distance Minimization. 
+ Published in: IEEE Transactions on Medical Imaging, Volume: 28 , Issue: 5, pp  676 -- 686, May 2009 
+
+\bibitem{seg2}
+ Alireza Kashanipour, Narges Shamshiri Milani, Amir Reza Kashanipour : Robust Color Classification Using Fuzzy Rule-Based Particle Swarm Optimization
+Published in: 2008 Congress on Image and Signal Processing 
+July 2008
+\doi{10.1109/CISP.2008.770}
+
+\bibitem{seg3}
+Dumitru Dan Burdescu, Marius Brezovan, Liana Stanescu, Cosmin Stoica Spahiu: A Spatial Segmentation Method
+International Journal of Computer Science and Applications
+Vol. 11, No. 1, pp. 75 -- 100, 2014 
+
+\bibitem{eff_app}
+Irfanullah, Kamal Haider, Qasim Sattar, Sadaqat-ur-Rehman, Amjad Ali: An Efficient Approach for Sky Detection. 
+IJCSI International Journal of Computer Science Issues, Vol. 10, Issue 4, No 1, July 2013
+, pp. 223--226.
+
+\bibitem{ef_sky_detect}
+Chi-Wei Wang, Jian-Jiun Ding, Po-Jen Chen: An Efficient Sky Detection Algorithm Based on Hybrid Probability Model. 
+Proceedings of APSIPA Annual Summit and Conference 2015, pp. 919--922, Dec. 2015.
+
+\bibitem{fcn}
+Jonathan Long, Evan Shelhamer, Trevor Darrell: Fully Convolutional Networks for Semantic Segmentation. 
+IEEE Transactions on Pattern Analysis and Machine Intelligence
+Volume 39 Issue 4, April 2017
+Page 640-651 
+
+\bibitem{seg_sky}
+Cecilia La Place, Aisha Urooj Khan, Ali Borji: Segmenting Sky Pixels in Images
+, {\tt  arXiv:1712.09161v2 [cs.CV]}
+8 Jan 2018
+
+\bibitem{sky_seg_wild}
+Radu P. Mihail, Valdosta State University, Scott Workman, Zach Bessinger, Nathan Jacobs: Sky segmentation in the wild: An empirical study
+Published in: 2016 IEEE Winter Conference on Applications of Computer Vision (WACV), March 2016, IEEE(2016).
+\doi{10.1109/WACV.2016.7477637}
+
+\bibitem{unet}
+Olaf Ronneberger, Philipp Fischer, Thomas Brox: U-Net: Convolutional Networks for BiomedicalImage Segmentation
+, {\tt  arXiv:1505.04597v1  [cs.CV]}
+18 May 2015
+
+\bibitem{resnet}
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun: Deep Residual Learning for Image Recognition
+, {\tt  arXiv:1512.03385v1  [cs.CV]}
+10 Dec 2015
+
+\bibitem{mobnet}
+Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen: MobileNetV2: Inverted Residuals and Linear Bottlenecks
+, {\tt arXiv:1801.04381v4  [cs.CV]}
+21 Mar 2019
+\end{thebibliography}
+\end{document}

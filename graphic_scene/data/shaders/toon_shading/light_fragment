@@ -1,0 +1,29 @@
+uniform sampler2D texture;
+uniform float edge_power;
+
+varying vec2 texcoord;
+varying vec3 light_dir;
+varying vec3 normal;
+
+void main() {
+    vec3 n_light_dir = normalize(light_dir);
+    vec3 n_normal = normalize(normal);
+
+    vec4 color = texture2D(texture, texcoord);
+    float r = float(floor(color[0] * edge_power)) / edge_power;
+    float g = float(floor(color[1] * edge_power)) / edge_power;
+    float b = float(floor(color[2] * edge_power)) / edge_power;
+    color = vec4(r, g, b, color[3]);
+
+    float diffuse = max(0.0, dot(n_normal, n_light_dir)) + 0.2;
+    vec4 toon_color;
+
+    if (diffuse < 0.5)
+        toon_color = color * 0.3;
+    else if (diffuse < 0.8)
+        toon_color = color;
+    else
+        toon_color = color * 1.7;
+
+	gl_FragColor = toon_color;
+}
